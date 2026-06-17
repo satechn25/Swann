@@ -188,9 +188,25 @@
       .grid-bg {
         position: absolute;
         inset: 0;
-        background-image: linear-gradient(rgba(18, 70, 200, 0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(18, 70, 200, 0.07) 1px, transparent 1px);
+        /* base grid removed — the bulging overlay (::before) now renders the grid */
+        transform-origin: 50% 50%;
+        will-change: transform, background-position;
+        pointer-events: none;
+      }
+      .grid-bg::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image: linear-gradient(rgba(18, 70, 200, 0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(18, 70, 200, 0.16) 1px, transparent 1px);
         background-size: 60px 60px;
-        mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 30%, transparent 100%);
+        -webkit-mask-image: radial-gradient(circle at var(--mx,50%) var(--my,50%), rgba(0,0,0,0.98) 0%, rgba(0,0,0,0.6) 22%, transparent 58%);
+        mask-image: radial-gradient(circle at var(--mx,50%) var(--my,50%), rgba(0,0,0,0.98) 0%, rgba(0,0,0,0.6) 22%, transparent 58%);
+        transform-origin: var(--mx,50%) var(--my,50%);
+        transform: scale(var(--gscale,1));
+        transition: transform 120ms linear, opacity 140ms linear;
+        opacity: 1;
+        pointer-events: none;
+        mix-blend-mode: screen;
       }
       .glow1 {
         position: absolute;
@@ -209,6 +225,24 @@
         height: 700px;
         background: radial-gradient(circle, rgba(0, 168, 150, 0.11) 0%, transparent 60%);
         pointer-events: none;
+      }
+      .cursor-glow {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 640px;
+        height: 640px;
+        background: radial-gradient(circle at center, rgba(58,130,255,0.14) 0%, rgba(58,130,255,0.06) 25%, transparent 60%);
+        pointer-events: none;
+        transform: translate(-50%, -50%);
+        filter: blur(36px);
+        transition: opacity 240ms linear;
+        opacity: 0;
+        z-index: 0;
+        mix-blend-mode: screen;
+      }
+      @media (max-width: 700px) {
+        .cursor-glow { width: 420px; height: 420px; filter: blur(28px); }
       }
       .hero-inner {
         max-width: var(--max);
@@ -1266,6 +1300,7 @@
       <div class="grid-bg"></div>
       <div class="glow1"></div>
       <div class="glow2"></div>
+      <div class="cursor-glow" aria-hidden="true"></div>
       <div class="hero-inner">
         <div>
           <div class="hero-badge">Bangalore &bull; Global Delivery</div>
@@ -1275,7 +1310,7 @@
             <a href="#process" class="btn-glow">How We Work &#8594;</a>
             <a href="#contact" class="btn-out">Talk to Us</a>
           </div>
-          <div class="hero-stats">
+          <!-- <div class="hero-stats">
             <div class="stat">
               <div class="stat-n">3+</div>
               <div class="stat-l">Products Live</div>
@@ -1288,7 +1323,7 @@
               <div class="stat-n">24h</div>
               <div class="stat-l">First Response</div>
             </div>
-          </div>
+          </div> -->
         </div>
         <div class="hero-right">
           <div class="hcard">
@@ -1733,6 +1768,101 @@
     </footer>
 
     <script>
+      (function () {
+        const glow = document.querySelector(".cursor-glow");
+        const grid = document.querySelector(".grid-bg");
+        const hero = document.querySelector(".hero");
+        if (!glow || !grid || !hero) return;
+
+        let mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+        let pos = { x: mouse.x, y: mouse.y };
+        let visible = false;
+
+        const gridState = { rx: 0, ry: 0, bgx: 50, bgy: 50, scale: 1, dist: 1 };
+        const gridTarget = { rx: 0, ry: 0, bgx: 50, bgy: 50, scale: 1, dist: 1 };
+
+        function setTargetsFromPointer(clientX, clientY) {
+          const rect = hero.getBoundingClientRect();
+          const cx = rect.left + rect.width / 2;
+          const cy = rect.top + rect.height / 2;
+          const relX = Math.max(-1, Math.min(1, (clientX - cx) / (rect.width / 2)));
+          const relY = Math.max(-1, Math.min(1, (clientY - cy) / (rect.height / 2)));
+          gridTarget.rx = relY * 12; // tilt amount (increased)
+          gridTarget.ry = -relX * 16;
+          gridTarget.bgx = 50 + relX * 10;
+          gridTarget.bgy = 50 + relY * 10;
+          const dist = Math.min(1, Math.hypot(relX, relY));
+          gridTarget.scale = 1 + 0.01 * (1 - dist);
+          gridTarget.dist = dist;
+        }
+
+        window.addEventListener("mousemove", (e) => {
+          mouse.x = e.clientX;
+          mouse.y = e.clientY;
+          setTargetsFromPointer(e.clientX, e.clientY);
+          if (!visible) {
+            glow.style.opacity = "1";
+            visible = true;
+          }
+        });
+
+        window.addEventListener("pointerleave", () => {
+          glow.style.opacity = "0";
+          visible = false;
+          gridTarget.rx = 0;
+          gridTarget.ry = 0;
+          gridTarget.bgx = 50;
+          gridTarget.bgy = 50;
+          gridTarget.scale = 1;
+        });
+
+        window.addEventListener("touchstart", (e) => {
+          const t = e.touches[0];
+          mouse.x = t.clientX;
+          mouse.y = t.clientY;
+          setTargetsFromPointer(t.clientX, t.clientY);
+          glow.style.opacity = "1";
+        }, { passive: true });
+
+        window.addEventListener("touchmove", (e) => {
+          const t = e.touches[0];
+          mouse.x = t.clientX;
+          mouse.y = t.clientY;
+          setTargetsFromPointer(t.clientX, t.clientY);
+        }, { passive: true });
+
+        function loop() {
+          pos.x += (mouse.x - pos.x) * 0.14;
+          pos.y += (mouse.y - pos.y) * 0.14;
+          // Position glow relative to the hero container (client coords -> local coords)
+          const rect = hero.getBoundingClientRect();
+          const localX = pos.x - rect.left;
+          const localY = pos.y - rect.top;
+          glow.style.left = localX + "px";
+          glow.style.top = localY + "px";
+
+          gridState.rx += (gridTarget.rx - gridState.rx) * 0.12;
+          gridState.ry += (gridTarget.ry - gridState.ry) * 0.12;
+          gridState.bgx += (gridTarget.bgx - gridState.bgx) * 0.12;
+          gridState.bgy += (gridTarget.bgy - gridState.bgy) * 0.12;
+          gridState.scale += (gridTarget.scale - gridState.scale) * 0.12;
+          gridState.dist += (gridTarget.dist - gridState.dist) * 0.12;
+
+          grid.style.transform = `perspective(900px) rotateX(${gridState.rx}deg) rotateY(${gridState.ry}deg) scale(${gridState.scale})`;
+          grid.style.backgroundPosition = `${gridState.bgx}% ${gridState.bgy}%`;
+
+          // Update masked overlay variables to create a local bulge around the pointer
+          const bulgeScale = 1 + (1 - gridState.dist) * 0.5; // stronger when pointer is closer to center (intensified)
+          hero.style.setProperty("--mx", `${gridState.bgx}%`);
+          hero.style.setProperty("--my", `${gridState.bgy}%`);
+          hero.style.setProperty("--gscale", String(bulgeScale));
+
+          requestAnimationFrame(loop);
+        }
+
+        requestAnimationFrame(loop);
+      })();
+
       const io = new IntersectionObserver(
         (e) =>
           e.forEach((x) => {
